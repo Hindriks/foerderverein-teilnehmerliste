@@ -233,16 +233,16 @@ for meta in events:
     etype = meta.get("event_type", "")
     label = f" · {etype}" if etype else ""
     st.markdown(f"### {meta.get('title','(ohne Titel)')}{label}  –  {meta.get('date','')} · {meta.get('location','')}")
-    
+
     qr_file = qr_path(eid)
     if os.path.exists(qr_file):
         st.image(qr_file, width=160, caption="QR-Code (Formular)")
     st.code(f"{BASE_URL}/?event={eid}&mode=form")
 
+    df = load_event_df(eid)                     # ← gleiche Einrückung wie qr_file
+    st.metric("Anzahl Einträge", len(df))
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-        df = load_event_df(eid)
-        st.metric("Anzahl Einträge", len(df))
-        st.dataframe(df, use_container_width=True, hide_index=True)
 
         exp_c1, exp_c2 = st.columns(2)
         with exp_c1:
