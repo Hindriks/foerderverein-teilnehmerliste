@@ -65,7 +65,8 @@ def new_event(title: str, date: str, location: str):
     save_event_df(event_id, load_event_df(event_id))
 
     rel_form = f"?event={event_id}&mode=form"
-    full_form = f"{BASE_URL}/{rel_form.lstrip('?')}"
+full_form = f"{BASE_URL}{rel_form}"
+
     qr_png = make_qr_png_bytes(full_form)
     with open(qr_path(event_id), "wb") as f:
         f.write(qr_png)
