@@ -239,26 +239,26 @@ for meta in events:
         st.image(qr_file, width=160, caption="QR-Code (Formular)")
     st.code(f"{BASE_URL}/?event={eid}&mode=form")
 
-    df = load_event_df(eid)                     # ← gleiche Einrückung wie qr_file
+    df = load_event_df(eid)
     st.metric("Anzahl Einträge", len(df))
     st.dataframe(df, use_container_width=True, hide_index=True)
 
+    exp_c1, exp_c2 = st.columns(2)
+    with exp_c1:
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ CSV exportieren",
+                           data=csv_bytes,
+                           file_name=f"teilnehmer_{eid}.csv",
+                           mime="text/csv",
+                           key=f"csv_{eid}")
+    with exp_c2:
+        xlsx_bytes = export_xlsx_bytes(df)
+        st.download_button("⬇️ XLSX exportieren",
+                           data=xlsx_bytes,
+                           file_name=f"teilnehmer_{eid}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           key=f"xlsx_{eid}")
 
-        exp_c1, exp_c2 = st.columns(2)
-        with exp_c1:
-            csv_bytes = df.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ CSV exportieren",
-                               data=csv_bytes,
-                               file_name=f"teilnehmer_{eid}.csv",
-                               mime="text/csv",
-                               key=f"csv_{eid}")
-        with exp_c2:
-            xlsx_bytes = export_xlsx_bytes(df)
-            st.download_button("⬇️ XLSX exportieren",
-                               data=xlsx_bytes,
-                               file_name=f"teilnehmer_{eid}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               key=f"xlsx_{eid}")
 
         st.warning("Zurücksetzen leert diese Teilnehmerliste unwiderruflich.")
         if st.button("🔁 Liste zurücksetzen", key=f"reset_{eid}"):
