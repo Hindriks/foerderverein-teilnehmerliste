@@ -200,33 +200,52 @@ if event_id and mode == "form":
     st.stop()
 
 # ---------- Admin ----------
-if event_id and mode == "admin":
+if mode == "admin":
     if admin_key != ADMIN_KEY:
         st.error("Kein Zugriff: falsches oder fehlendes Admin-Passwort.")
         st.stop()
 
-    meta = read_meta(event_id)
-    st.header(f"Admin · {meta.get('title','')} – {meta.get('date','')} @ {meta.get('location','')}")
+    # --- Zentrale Admin-Übersicht ---
+    st.header("🧯 Admin-Übersicht – Alle Termine")
 
-    c1, c2 = st.columns([1,2])
-    if os.path.exists(qr_path(event_id)):
-        c1.image(qr_path(event_id), caption="QR-Code (Formular)")
-    c1.code(f"{BASE_URL}/?event={event_id}&mode=form")
-    df = load_event_df(event_id)
-    st.metric("Anzahl Einträge", len(df))
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    events = list_events()
+    if not events:
+        st.info("Noch keine Termine angelegt.")
+        st.stop()
 
-    exp_c1, exp_c2 = st.columns(2)
-    with exp_c1:
-        csv_bytes = df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ CSV exportieren", data=csv_bytes, file_name=f"teilnehmer_{event_id}.csv", mime="text/csv")
-    with exp_c2:
-        xlsx_bytes = export_xlsx_bytes(df)
-        st.download_button("⬇️ XLSX exportieren", data=xlsx_bytes, file_name=f"teilnehmer_{event_id}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    for meta in events:
+        eid = meta["id"]
+        st.markdown(f"### {meta.get('title','(ohne Titel)')}  –  {meta.get('date','')} · {meta.get('location','')}")
+        qr_file = qr_path(eid)
+        if os.path.exists(qr_file):
+            st.image(qr_file, width=160, caption="QR-Code (Formular)")
+        st.code(f"{BASE_URL}/?event={eid}&mode=form")
 
-    st.warning("Zurücksetzen leert diese Teilnehmerliste unwiderruflich.")
-    if st.button("🔁 Liste zurücksetzen"):
-        save_event_df(event_id, load_event_df(event_id).iloc[0:0])
-        st.success("Liste zurückgesetzt.")
+        df = load_event_df(eid)
+        st.metric("Anzahl Einträge", len(df))
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        exp_c1, exp_c2 = st.columns(2)
+        with exp_c1:
+            csv_bytes = df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ CSV exportieren",
+                               data=csv_bytes,
+                               file_name=f"teilnehmer_{eid}.csv",
+                               mime="text/csv",
+                               key=f"csv_{eid}")
+        with exp_c2:
+            xlsx_bytes = export_xlsx_bytes(df)
+            st.download_button("⬇️ XLSX exportieren",
+                               data=xlsx_bytes,
+                               file_name=f"teilnehmer_{eid}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               key=f"xlsx_{eid}")
+
+        st.warning("Zurücksetzen leert diese Teilnehmerliste unwiderruflich.")
+        if st.button("🔁 Liste zurücksetzen", key=f"reset_{eid}"):
+            save_event_df(eid, load_event_df(eid).iloc[0:0])
+            st.success(f"Liste {meta.get('title','')} zurückgesetzt.")
+        st.divider()
+
     st.stop()
+
