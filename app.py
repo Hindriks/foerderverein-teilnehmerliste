@@ -18,54 +18,25 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "112")
 LOGO_FILENAME = os.getenv("LOGO_FILE", "Logo Förderverein.jpg")
-BASE_URL = os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip("/")
+
+# 👉 BASE_URL immer mit Slash am Ende, damit iPhones QR-Links korrekt öffnen
+BASE_URL = (os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip("/") + "/")
 
 APP_TITLE = "🧯 Teilnehmerliste Feuerwehr Nordhorn Förderverein"
 
+
 # ---------- Hilfsfunktionen ----------
-def event_path(event_id: str) -> str:
-    return os.path.join(DATA_DIR, f"{event_id}.csv")
-
-def qr_path(event_id: str) -> str:
-    return os.path.join(DATA_DIR, f"{event_id}_qr.png")
-
-def meta_path(event_id: str) -> str:
-    return os.path.join(DATA_DIR, f"{event_id}_meta.json")
-
-def load_event_df(event_id: str) -> pd.DataFrame:
-    path = event_path(event_id)
-    if os.path.exists(path):
-        return pd.read_csv(path)
-    return pd.DataFrame(columns=["event_type", "timestamp", "date", "name", "company", "photo_consent"])
-
-def save_event_df(event_id: str, df: pd.DataFrame):
-    df.to_csv(event_path(event_id), index=False)
-
-def export_xlsx_bytes(df: pd.DataFrame) -> bytes:
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Teilnehmer")
-    buf.seek(0)
-    return buf.read()
-
-def make_qr_png_bytes(text: str) -> bytes:
-    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L)
-    qr.add_data(text)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    b = io.BytesIO()
-    img.save(b, format="PNG")
-    return b.getvalue()
-
 def regenerate_qr_for_event(eid: str, base_url: str):
-    rel_form = f"?event={eid}&mode=form"
-    full_form = f"{base_url}{rel_form}"
+    """Erzeugt den QR-Code eines bestehenden Events neu – mit korrekter absoluter URL"""
+    full_form = f"{base_url.rstrip('/')}/?event={eid}&mode=form"
     png = make_qr_png_bytes(full_form)
     with open(qr_path(eid), "wb") as f:
         f.write(png)
     return full_form
 
+
 def new_event(title: str, date: str, location: str, event_type: str):
+    """Legt ein neues Event an und erzeugt QR-Code mit absoluter URL"""
     event_id = uuid.uuid4().hex[:10]
     meta = {
         "id": event_id,
@@ -75,15 +46,21 @@ def new_event(title: str, date: str, location: str, event_type: str):
         "event_type": event_type.strip(),
         "created_at": datetime.now().isoformat(timespec="seconds")
     }
+
     save_event_df(event_id, load_event_df(event_id))
-    rel_form = f"?event={event_id}&mode=form"
-    full_form = f"{BASE_URL}{rel_form}"
+
+    # ✅ Hier absolute URL (immer mit /?event=...)
+    full_form = f"{BASE_URL}?event={event_id}&mode=form"
+
     qr_png = make_qr_png_bytes(full_form)
     with open(qr_path(event_id), "wb") as f:
         f.write(qr_png)
+
     with open(meta_path(event_id), "w", encoding="utf-8") as f:
         f.write(json.dumps(meta, ensure_ascii=False, indent=2))
+
     return meta, full_form
+
 
 def read_meta(event_id: str) -> dict:
     try:
