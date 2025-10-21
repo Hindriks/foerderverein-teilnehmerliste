@@ -53,13 +53,14 @@ def make_qr_png_bytes(text: str) -> bytes:
     img.save(b, format="PNG")
     return b.getvalue()
 
-def new_event(title: str, date: str, location: str):
+def new_event(title: str, date: str, location: str, event_type: str):
     event_id = uuid.uuid4().hex[:10]
     meta = {
         "id": event_id,
         "title": title.strip(),
         "date": date.strip(),
         "location": location.strip(),
+        "event_type": event_type.strip(),
         "created_at": datetime.now().isoformat(timespec="seconds")
     }
     save_event_df(event_id, load_event_df(event_id))
@@ -70,11 +71,11 @@ def new_event(title: str, date: str, location: str):
     with open(qr_path(event_id), "wb") as f:
         f.write(qr_png)
 
-
     with open(meta_path(event_id), "w", encoding="utf-8") as f:
         f.write(pd.Series(meta).to_json(force_ascii=False, indent=2))
 
     return meta, full_form
+
 
 def read_meta(event_id: str) -> dict:
     try:
@@ -144,19 +145,21 @@ if not event_id and not mode:
         4️⃣ Admin sieht alles live, kann exportieren oder zurücksetzen.
         """)
 
-    st.subheader("Neuen Termin anlegen")
-    with st.form("create_event"):
-        c1, c2, c3 = st.columns(3)
-        title = c1.text_input("Titel", value="Teilnehmerliste Feuerwehr Nordhorn Förderverein")
-        date = c2.text_input("Datum", value=datetime.now().strftime("%d.%m.%Y"))
-        location = c3.text_input("Ort", value="Wache Nord")
-        submitted = st.form_submit_button("Termin erstellen")
-        if submitted:
-            meta, full_form = new_event(title, date, location)
-            st.success(f"Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']})")
-            st.markdown(f"**Formular-Link:** `{full_form}`")
-            st.image(qr_path(meta['id']), caption="QR-Code zum Formular (einfach ausdrucken)")
-            st.stop()
+st.subheader("Neuen Termin anlegen")
+with st.form("create_event"):
+    c1, c2, c3 = st.columns(3)
+    title = c1.text_input("Titel", value="Teilnehmerliste Feuerwehr Nordhorn Förderverein")
+    date = c2.text_input("Datum", value=datetime.now().strftime("%d.%m.%Y"))
+    location = c3.text_input("Ort", value="Wache Nord")
+    event_type = st.selectbox("Veranstaltung*", ["Brandschutzhelfer-Seminar", "Feuerlöschtraining"])
+    submitted = st.form_submit_button("Termin erstellen")
+    if submitted:
+        meta, full_form = new_event(title, date, location, event_type)
+        st.success(f"Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
+        st.markdown(f"**Formular-Link:** `{full_form}`")
+        st.image(qr_path(meta['id']), caption="QR-Code zum Formular (einfach ausdrucken)")
+        st.stop()
+
 
     st.subheader("Vorhandene Termine")
     evts = list_events()
@@ -176,37 +179,38 @@ if not event_id and not mode:
 # ---------- Formular ----------
 if event_id and mode == "form":
     st.header("Anmeldung")
-    df = load_event_df(event_id)
+df = load_event_df(event_id)
+meta = read_meta(event_id)
+pretype = meta.get("event_type", "").strip() or "Feuerlöschtraining"
 
-    with st.form("signup"):
-        event_type = st.selectbox("Veranstaltung*", ["Brandschutzhelfer-Seminar", "Feuerlöschtraining"])
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Name*", placeholder="Max Muster")
-        company = c2.text_input("Unternehmen / Betrieb*", placeholder="Firma / Einrichtung")
-        photo_consent = st.selectbox("Einverständnis für eventuelle Fotos*", ["Ja", "Nein"])
-        submit = st.form_submit_button("Eintragen")
+st.info(f"Veranstaltung: **{pretype}**")
 
-        if submit:
-            if not name.strip() or not company.strip():
-                st.error("Bitte alle Pflichtfelder ausfüllen.")
-            else:
-                now = datetime.now()
-                new_row = {
-                    "event_type": event_type,
-                    "timestamp": now.isoformat(timespec="seconds"),
-                    "date": now.strftime("%d.%m.%Y"),
-                    "name": name.strip(),
-                    "company": company.strip(),
-                    "photo_consent": photo_consent
-                }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                save_event_df(event_id, df)
-                st.success("Danke! Deine Anmeldung wurde gespeichert.")
-                st.experimental_set_query_params(event=event_id, mode="form")
-                st.stop()
+with st.form("signup"):
+    c1, c2 = st.columns(2)
+    name = c1.text_input("Name*", placeholder="Max Muster")
+    company = c2.text_input("Unternehmen / Betrieb*", placeholder="Firma / Einrichtung")
+    photo_consent = st.selectbox("Einverständnis für eventuelle Fotos*", ["Ja", "Nein"])
+    submit = st.form_submit_button("Eintragen")
 
-    st.info("Du kannst dieses Fenster schließen oder weitere Personen eintragen.")
-    st.stop()
+    if submit:
+        if not name.strip() or not company.strip():
+            st.error("Bitte alle Pflichtfelder ausfüllen.")
+        else:
+            now = datetime.now()
+            new_row = {
+                "event_type": pretype,
+                "timestamp": now.isoformat(timespec="seconds"),
+                "date": now.strftime("%d.%m.%Y"),
+                "name": name.strip(),
+                "company": company.strip(),
+                "photo_consent": photo_consent
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            save_event_df(event_id, df)
+            st.success("Danke! Deine Anmeldung wurde gespeichert.")
+            st.experimental_set_query_params(event=event_id, mode="form")
+            st.stop()
+
 
 # ---------- Admin ----------
 if mode == "admin":
@@ -224,11 +228,17 @@ if mode == "admin":
 
     for meta in events:
         eid = meta["id"]
-        st.markdown(f"### {meta.get('title','(ohne Titel)')}  –  {meta.get('date','')} · {meta.get('location','')}")
-        qr_file = qr_path(eid)
-        if os.path.exists(qr_file):
-            st.image(qr_file, width=160, caption="QR-Code (Formular)")
-        st.code(f"{BASE_URL}/?event={eid}&mode=form")
+for meta in events:
+    eid = meta["id"]
+    etype = meta.get("event_type", "")
+    label = f" · {etype}" if etype else ""
+    st.markdown(f"### {meta.get('title','(ohne Titel)')}{label}  –  {meta.get('date','')} · {meta.get('location','')}")
+    
+    qr_file = qr_path(eid)
+    if os.path.exists(qr_file):
+        st.image(qr_file, width=160, caption="QR-Code (Formular)")
+    st.code(f"{BASE_URL}/?event={eid}&mode=form")
+
 
         df = load_event_df(eid)
         st.metric("Anzahl Einträge", len(df))
