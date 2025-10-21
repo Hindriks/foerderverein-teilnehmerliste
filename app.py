@@ -123,6 +123,8 @@ def load_logo():
     return None
 
 # ---------- Query-Parameter ----------
+st.caption(f"DBG: event={event_id} | mode={mode}")
+
 try:
     # Neuer Weg (Streamlit >= 1.30)
     qp_new = dict(st.query_params)
