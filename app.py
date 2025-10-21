@@ -168,55 +168,55 @@ if not event_id and not mode:
         4️⃣ Admin sieht alles live und kann exportieren.
         """)
 
-st.subheader("Neuen Termin anlegen")
-with st.form("create_event"):
-    c1, c2, c3 = st.columns(3)
-    title = c1.text_input("Titel", value="Teilnehmerliste Feuerwehr Nordhorn Förderverein")
-    date = c2.text_input("Datum", value=datetime.now().strftime("%d.%m.%Y"))
-    location = c3.text_input("Ort", value="Wache Nord")
-    event_type = st.selectbox("Veranstaltung*", ["Brandschutzhelfer-Seminar", "Feuerlöschtraining"])
-    submitted = st.form_submit_button("Termin erstellen")
-    if submitted:
-        meta, full_form = new_event(title, date, location, event_type)
-        st.success(f"✅ Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
-        st.markdown(f"**Formular-Link:** `{full_form}`")
+    st.subheader("Neuen Termin anlegen")
+    with st.form("create_event"):
+        c1, c2, c3 = st.columns(3)
+        title = c1.text_input("Titel", value="Teilnehmerliste Feuerwehr Nordhorn Förderverein")
+        date = c2.text_input("Datum", value=datetime.now().strftime("%d.%m.%Y"))
+        location = c3.text_input("Ort", value="Wache Nord")
+        event_type = st.selectbox("Veranstaltung*", ["Brandschutzhelfer-Seminar", "Feuerlöschtraining"])
+        submitted = st.form_submit_button("Termin erstellen")
+        if submitted:
+            meta, full_form = new_event(title, date, location, event_type)
+            st.success(f"✅ Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
+            st.markdown(f"**Formular-Link:** `{full_form}`")
 
-        # QR-Code anzeigen
-        st.image(qr_path(meta['id']), caption="📱 QR-Code zum Formular (einfach scannen oder ausdrucken)")
+            # QR-Code anzeigen
+            st.image(qr_path(meta['id']), caption="📱 QR-Code zum Formular (einfach scannen oder ausdrucken)")
 
-        # 👇 Neu: klickbarer Button + Direktlink für Handy
-        st.link_button("📱 Formular direkt öffnen", full_form)
-        st.write("Direktlink:", full_form)
+            # Klickbarer Button + Direktlink (mobil-freundlich)
+            st.link_button("📱 Formular direkt öffnen", full_form)
+            st.write("Direktlink:", full_form)
 
-        # Nach dem Anlegen hier stoppen, damit der Bereich unten nicht sofort rendert
-        st.stop()
+            st.stop()
 
-st.subheader("Vorhandene Termine")
-evts = list_events()
-if not evts:
-    st.info("Noch keine Termine angelegt.")
-else:
-    for meta in evts:
-        eid = meta["id"]
-        c1, c2, c3, c4 = st.columns([3, 2, 2, 3])
+    st.subheader("Vorhandene Termine")
+    evts = list_events()
+    if not evts:
+        st.info("Noch keine Termine angelegt.")
+    else:
+        for meta in evts:
+            eid = meta["id"]
+            c1, c2, c3, c4 = st.columns([3, 2, 2, 3])
 
-        etype = meta.get("event_type", "")
-        c1.markdown(f"**{meta.get('title','')}**  \n{meta.get('date','')} · {meta.get('location','')}")
-        if etype:
-            c1.markdown(f"*{etype}*")
+            etype = meta.get("event_type", "")
+            c1.markdown(f"**{meta.get('title','')}**  \n{meta.get('date','')} · {meta.get('location','')}")
+            if etype:
+                c1.markdown(f"*{etype}*")
 
-        # Codes mit absoluter URL
-        c2.code(f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form")
-        c3.code(f"{BASE_URL.rstrip('/')}/?event={eid}&mode=admin&key=112")
+            # Codes mit absoluter URL
+            c2.code(f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form")
+            c3.code(f"{BASE_URL.rstrip('/')}/?event={eid}&mode=admin&key=112")
 
-        # QR + Button + Direktlink (alles innerhalb der Schleife!)
-        if os.path.exists(qr_path(eid)):
-            c4.image(qr_path(eid), caption="QR (Formular)")
-        direct = f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form&v={eid}"
-        st.link_button("📱 Formular direkt öffnen", direct)
-        st.write("Direktlink:", direct)
+            # QR + Button + Direktlink (alles innerhalb der Schleife!)
+            if os.path.exists(qr_path(eid)):
+                c4.image(qr_path(eid), caption="QR (Formular)")
+            direct = f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form&v={eid}"
+            st.link_button("📱 Formular direkt öffnen", direct)
+            st.write("Direktlink:", direct)
 
-st.stop()
+    # GANZ WICHTIG: stop am Ende der Startseite
+    st.stop()
 
 # ---------- Formular ----------
 if event_id and mode == "form":
