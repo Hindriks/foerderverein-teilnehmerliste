@@ -123,8 +123,6 @@ def load_logo():
     return None
 
 # ---------- Query-Parameter ----------
-st.caption(f"DBG: event={event_id} | mode={mode}")
-
 try:
     # Neuer Weg (Streamlit >= 1.30)
     qp_new = dict(st.query_params)
@@ -143,10 +141,13 @@ def _pick_param(name, default=None):
     v = qp_old.get(name, [None])
     return (v[0] if isinstance(v, list) else v) or default
 
+# Jetzt die eigentlichen Parameter holen
 event_id = _pick_param("event", None)
 mode = _pick_param("mode", "")
 admin_key = _pick_param("key", "")
 
+# Debug-Anzeige (kannst du nachher wieder entfernen)
+st.caption(f"🔍 DBG → event={event_id} | mode={mode} | key={admin_key}")
 
 # ---------- Kopfbereich ----------
 logo = load_logo()
