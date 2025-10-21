@@ -49,7 +49,13 @@ def export_xlsx_bytes(df: pd.DataFrame) -> bytes:
     return buf.read()
 
 def make_qr_png_bytes(text: str) -> bytes:
-    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L)
+    # Robuster QR für Handy-Scanner: hohe Fehlerkorrektur, größere Module, klarer Rand
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,  # höher = robuster
+        box_size=8,   # größer = leichter scannbar (8–10 ist gut für Displays)
+        border=3      # weißer Rand (2–4)
+    )
     qr.add_data(text)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -57,9 +63,10 @@ def make_qr_png_bytes(text: str) -> bytes:
     img.save(b, format="PNG")
     return b.getvalue()
 
+
 def regenerate_qr_for_event(eid: str, base_url: str):
     """Erzeugt den QR-Code eines bestehenden Events neu – mit korrekter absoluter URL"""
-    full_form = f"{base_url.rstrip('/')}/?event={eid}&mode=form"
+    full_form = f"{base_url.rstrip('/')}/?event={eid}&mode=form&v={eid}"
     png = make_qr_png_bytes(full_form)
     with open(qr_path(eid), "wb") as f:
         f.write(png)
@@ -78,7 +85,7 @@ def new_event(title: str, date: str, location: str, event_type: str):
     }
 
     save_event_df(event_id, load_event_df(event_id))
-    full_form = f"{BASE_URL.rstrip('/')}/?event={event_id}&mode=form"
+    full_form = f"{BASE_URL.rstrip('/')}/?event={event_id}&mode=form&v={event_id}"
     qr_png = make_qr_png_bytes(full_form)
     with open(qr_path(event_id), "wb") as f:
         f.write(qr_png)
@@ -153,10 +160,18 @@ if not event_id and not mode:
         submitted = st.form_submit_button("Termin erstellen")
         if submitted:
             meta, full_form = new_event(title, date, location, event_type)
-            st.success(f"✅ Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
-            st.markdown(f"**Formular-Link:** `{full_form}`")
-            st.image(qr_path(meta['id']), caption="📱 QR-Code zum Formular (einfach scannen oder ausdrucken)")
-            st.stop()
+st.success(f"✅ Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
+st.markdown(f"**Formular-Link:** `{full_form}`")
+
+# QR-Code anzeigen
+st.image(qr_path(meta['id']), caption="📱 QR-Code zum Formular (einfach scannen oder ausdrucken)")
+
+# 👇 Neu: klickbarer Button + Direktlink für Handy
+st.link_button("📱 Formular direkt öffnen", full_form)
+st.write("Direktlink:", full_form)
+
+st.stop()
+
 
     st.subheader("Vorhandene Termine")
     evts = list_events()
@@ -172,8 +187,14 @@ if not event_id and not mode:
                 c1.markdown(f"*{etype}*")
             c2.code(f"{BASE_URL}?event={eid}&mode=form")
             c3.code(f"{BASE_URL}?event={eid}&mode=admin&key=112")
-            if os.path.exists(qr_path(eid)):
-                c4.image(qr_path(eid), caption="QR (Formular)")
+if os.path.exists(qr_path(eid)):
+    c4.image(qr_path(eid), caption="QR (Formular)")
+
+# 👇 Neu: Button + Direktlink unterhalb des QR
+direct = f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form&v={eid}"
+st.link_button("📱 Formular direkt öffnen", direct, key=f"open_{eid}")
+st.write("Direktlink:", direct)
+
     st.stop()
 
 # ---------- Formular ----------
