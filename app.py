@@ -107,6 +107,15 @@ def load_logo():
             return None
     return None
 
+def regenerate_qr_for_event(eid: str, base_url: str):
+    rel_form = f"?event={eid}&mode=form"
+    full_form = f"{base_url}{rel_form}"
+    png = make_qr_png_bytes(full_form)
+    with open(qr_path(eid), "wb") as f:
+        f.write(png)
+    return full_form
+
+
 # ---------- Query-Parameter ----------
 qp = st.experimental_get_query_params()
 event_id = qp.get("event", [None])[0]
