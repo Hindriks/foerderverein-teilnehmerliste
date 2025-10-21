@@ -123,31 +123,55 @@ def load_logo():
     return None
 
 # ---------- Query-Parameter ----------
+import re
+
+# Neuer Weg (Streamlit >= 1.30)
 try:
-    # Neuer Weg (Streamlit >= 1.30)
     qp_new = dict(st.query_params)
 except Exception:
     qp_new = {}
 
-# Fallback auf den alten Weg, falls leer (manche Browser/iOS liefern initial noch nichts)
+# Fallback auf alten Weg, falls iOS/ältere Browser noch nichts liefern
 try:
     qp_old = st.experimental_get_query_params()
 except Exception:
     qp_old = {}
 
 def _pick_param(name, default=None):
+    """Hilfsfunktion: zieht den Wert aus neuen oder alten Query-Parametern."""
     if name in qp_new and qp_new.get(name) not in (None, "", []):
         return qp_new.get(name)
     v = qp_old.get(name, [None])
     return (v[0] if isinstance(v, list) else v) or default
 
-# Jetzt die eigentlichen Parameter holen
+# Haupt-Parameter abrufen
 event_id = _pick_param("event", None)
 mode = _pick_param("mode", "")
 admin_key = _pick_param("key", "")
 
-# Debug-Anzeige (kannst du nachher wieder entfernen)
+# ---------- iPhone / Safari-Kompatibilitäts-Fix ----------
+# Einige QR-Scanner / Safari-Varianten liefern die Query-Parameter nicht korrekt.
+# Hier wird versucht, sie aus der Referrer-URL auszulesen und nachzutragen.
+if not event_id:
+    try:
+        import streamlit.web.server.websocket_headers as ws_headers
+        headers = ws_headers.get_websocket_headers()
+        referer = headers.get("referer", "") if headers else ""
+    except Exception:
+        referer = ""
+
+    match = re.search(r"[?&]event=([a-zA-Z0-9]+)", referer)
+    mode_match = re.search(r"[?&]mode=([a-zA-Z]+)", referer)
+    if match:
+        event_id = match.group(1)
+        mode = mode_match.group(1) if mode_match else "form"
+        st.query_params.update({"event": event_id, "mode": mode})
+        st.toast("📱 Safari-Fix aktiviert – bitte kurz warten …")
+        st.rerun()
+
+# Debug-Ausgabe (kannst du später entfernen)
 st.caption(f"🔍 DBG → event={event_id} | mode={mode} | key={admin_key}")
+
 
 # ---------- Kopfbereich ----------
 logo = load_logo()
