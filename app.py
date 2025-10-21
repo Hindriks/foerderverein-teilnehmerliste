@@ -215,24 +215,26 @@ if event_id and mode == "form":
         photo_consent = st.selectbox("Einverständnis für eventuelle Fotos*", ["Ja", "Nein"])
         submit = st.form_submit_button("Eintragen")
 
-        if submit:
-            if not name.strip() or not company.strip():
-                st.error("Bitte alle Pflichtfelder ausfüllen.")
-            else:
-                now = datetime.now()
-                new_row = {
-                    "event_type": pretype,
-                    "timestamp": now.isoformat(timespec="seconds"),
-                    "date": now.strftime("%d.%m.%Y"),
-                    "name": name.strip(),
-                    "company": company.strip(),
-                    "photo_consent": photo_consent
-                }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                save_event_df(event_id, df)
-                st.success("✅ Danke! Deine Anmeldung wurde gespeichert.")
-                st.balloons()
-                st.stop()
+if submit:
+    if not name.strip() or not company.strip():
+        st.error("Bitte alle Pflichtfelder ausfüllen.")
+    else:
+        now = datetime.now()
+        new_row = {
+            "event_type": pretype,
+            "timestamp": now.isoformat(timespec="seconds"),
+            "date": now.strftime("%d.%m.%Y"),
+            "name": name.strip(),
+            "company": company.strip(),
+            "photo_consent": photo_consent
+        }
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        save_event_df(event_id, df)
+        st.success("✅ Danke! Deine Anmeldung wurde gespeichert.")
+        st.query_params.update({"event": event_id, "mode": "form"})  # ← NEU
+        st.balloons()
+        st.stop()
+
     st.stop()
 
 # ---------- Admin ----------
