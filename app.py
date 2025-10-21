@@ -18,14 +18,45 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "112")
 LOGO_FILENAME = os.getenv("LOGO_FILE", "Logo Förderverein.jpg")
-
-# 👉 BASE_URL immer mit Slash am Ende, damit iPhones QR-Links korrekt öffnen
 BASE_URL = (os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip("/") + "/")
 
 APP_TITLE = "🧯 Teilnehmerliste Feuerwehr Nordhorn Förderverein"
 
-
 # ---------- Hilfsfunktionen ----------
+def event_path(event_id: str) -> str:
+    return os.path.join(DATA_DIR, f"{event_id}.csv")
+
+def qr_path(event_id: str) -> str:
+    return os.path.join(DATA_DIR, f"{event_id}_qr.png")
+
+def meta_path(event_id: str) -> str:
+    return os.path.join(DATA_DIR, f"{event_id}_meta.json")
+
+def load_event_df(event_id: str) -> pd.DataFrame:
+    path = event_path(event_id)
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return pd.DataFrame(columns=["event_type", "timestamp", "date", "name", "company", "photo_consent"])
+
+def save_event_df(event_id: str, df: pd.DataFrame):
+    df.to_csv(event_path(event_id), index=False)
+
+def export_xlsx_bytes(df: pd.DataFrame) -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Teilnehmer")
+    buf.seek(0)
+    return buf.read()
+
+def make_qr_png_bytes(text: str) -> bytes:
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L)
+    qr.add_data(text)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    b = io.BytesIO()
+    img.save(b, format="PNG")
+    return b.getvalue()
+
 def regenerate_qr_for_event(eid: str, base_url: str):
     """Erzeugt den QR-Code eines bestehenden Events neu – mit korrekter absoluter URL"""
     full_form = f"{base_url.rstrip('/')}/?event={eid}&mode=form"
@@ -33,7 +64,6 @@ def regenerate_qr_for_event(eid: str, base_url: str):
     with open(qr_path(eid), "wb") as f:
         f.write(png)
     return full_form
-
 
 def new_event(title: str, date: str, location: str, event_type: str):
     """Legt ein neues Event an und erzeugt QR-Code mit absoluter URL"""
@@ -48,19 +78,13 @@ def new_event(title: str, date: str, location: str, event_type: str):
     }
 
     save_event_df(event_id, load_event_df(event_id))
-
-    # ✅ Hier absolute URL (immer mit /?event=...)
-    full_form = f"{BASE_URL}?event={event_id}&mode=form"
-
+    full_form = f"{BASE_URL.rstrip('/')}/?event={event_id}&mode=form"
     qr_png = make_qr_png_bytes(full_form)
     with open(qr_path(event_id), "wb") as f:
         f.write(qr_png)
-
     with open(meta_path(event_id), "w", encoding="utf-8") as f:
         f.write(json.dumps(meta, ensure_ascii=False, indent=2))
-
     return meta, full_form
-
 
 def read_meta(event_id: str) -> dict:
     try:
@@ -146,8 +170,8 @@ if not event_id and not mode:
             c1.markdown(f"**{meta.get('title','')}**  \n{meta.get('date','')} · {meta.get('location','')}")
             if etype:
                 c1.markdown(f"*{etype}*")
-            c2.code(f"{BASE_URL}/?event={eid}&mode=form")
-            c3.code(f"{BASE_URL}/?event={eid}&mode=admin&key=112")
+            c2.code(f"{BASE_URL}?event={eid}&mode=form")
+            c3.code(f"{BASE_URL}?event={eid}&mode=admin&key=112")
             if os.path.exists(qr_path(eid)):
                 c4.image(qr_path(eid), caption="QR (Formular)")
     st.stop()
@@ -208,7 +232,7 @@ if mode == "admin":
         qr_file = qr_path(eid)
         if os.path.exists(qr_file):
             st.image(qr_file, width=160, caption="QR-Code (Formular)")
-        st.code(f"{BASE_URL}/?event={eid}&mode=form")
+        st.code(f"{BASE_URL}?event={eid}&mode=form")
 
         df = load_event_df(eid)
         st.metric("Anzahl Einträge", len(df))
@@ -230,19 +254,18 @@ if mode == "admin":
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                key=f"xlsx_{eid}")
 
-        regen_c1, regen_c2 = st.columns([1,3])
+        regen_c1, regen_c2 = st.columns([1, 3])
         with regen_c1:
             if st.button("🔄 QR neu erzeugen", key=f"regen_{eid}"):
                 new_url = regenerate_qr_for_event(eid, BASE_URL)
                 st.success(f"QR aktualisiert: {new_url}")
         with regen_c2:
-            st.code(f"{BASE_URL}/?event={eid}&mode=form")
+            st.code(f"{BASE_URL}?event={eid}&mode=form")
 
         st.warning("Zurücksetzen leert diese Teilnehmerliste unwiderruflich.")
         if st.button("🔁 Liste zurücksetzen", key=f"reset_{eid}"):
             save_event_df(eid, load_event_df(eid).iloc[0:0])
             st.success(f"Liste {meta.get('title','')} zurückgesetzt.")
-
         st.divider()
 
     st.stop()
