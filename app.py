@@ -123,10 +123,28 @@ def load_logo():
     return None
 
 # ---------- Query-Parameter ----------
-qp = st.query_params
-event_id = qp.get("event", None)
-mode = qp.get("mode", "")
-admin_key = qp.get("key", "")
+try:
+    # Neuer Weg (Streamlit >= 1.30)
+    qp_new = dict(st.query_params)
+except Exception:
+    qp_new = {}
+
+# Fallback auf den alten Weg, falls leer (manche Browser/iOS liefern initial noch nichts)
+try:
+    qp_old = st.experimental_get_query_params()
+except Exception:
+    qp_old = {}
+
+def _pick_param(name, default=None):
+    if name in qp_new and qp_new.get(name) not in (None, "", []):
+        return qp_new.get(name)
+    v = qp_old.get(name, [None])
+    return (v[0] if isinstance(v, list) else v) or default
+
+event_id = _pick_param("event", None)
+mode = _pick_param("mode", "")
+admin_key = _pick_param("key", "")
+
 
 # ---------- Kopfbereich ----------
 logo = load_logo()
