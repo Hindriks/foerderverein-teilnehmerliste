@@ -123,10 +123,10 @@ def load_logo():
     return None
 
 # ---------- Query-Parameter ----------
-qp = st.experimental_get_query_params()
-event_id = qp.get("event", [None])[0]
-mode = qp.get("mode", [""])[0]
-admin_key = qp.get("key", [""])[0]
+qp = st.query_params
+event_id = qp.get("event", None)
+mode = qp.get("mode", "")
+admin_key = qp.get("key", "")
 
 # ---------- Kopfbereich ----------
 logo = load_logo()
@@ -195,7 +195,7 @@ else:
         if os.path.exists(qr_path(eid)):
             c4.image(qr_path(eid), caption="QR (Formular)")
         direct = f"{BASE_URL.rstrip('/')}/?event={eid}&mode=form&v={eid}"
-        st.link_button("📱 Formular direkt öffnen", direct, key=f"open_{eid}")
+        st.link_button("📱 Formular direkt öffnen", direct)
         st.write("Direktlink:", direct)
 
 st.stop()
