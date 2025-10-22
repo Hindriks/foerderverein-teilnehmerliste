@@ -114,8 +114,11 @@ def make_qr_png_bytes(text: str) -> bytes:
     return b.getvalue()
 
 def form_link_for(eid: str) -> str:
-    # iPhone-sicher: explizit /index.html? + Cachebuster
-    return f"{BASE_URL}/index.html?event={eid}&mode=form&v={eid}"
+    # iPhone-sicher: Query UND Hash doppelt setzen, plus Cache-Buster.
+    # Wenn Safari die Query abschneidet, holt das JS sie aus dem Hash zurück.
+    query = f"event={eid}&mode=form&v={eid}"
+    return f"{BASE_URL}/index.html?{query}#{query}"
+
 
 def admin_link_for(eid: str) -> str:
     return f"{BASE_URL}/index.html?event={eid}&mode=admin&key={ADMIN_KEY}"
