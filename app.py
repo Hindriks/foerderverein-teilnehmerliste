@@ -237,10 +237,11 @@ if not event_id:
 # Sicht-Check (bei Bedarf löschen)
 st.caption(f"🔎 Status: event={event_id} | mode={mode}")
 
-# Zusätzlicher Fallback: wenn Event da, aber Mode fehlt/anders → immer Formular
-if event_id and mode != "form":
+# Zusätzlicher Fallback: nur wenn Event da UND KEIN mode gesetzt ist → auf "form"
+if event_id and not mode:
     st.query_params.update({"event": event_id, "mode": "form"})
     st.rerun()
+
 
 # =========================
 #   HEADER
