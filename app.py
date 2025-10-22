@@ -48,58 +48,50 @@ st.markdown("""
     var hasEventQP = url.searchParams.has('event');
     var hash = url.hash || "";
 
-    function safeRedirect(target) {
+    function safeGo(target) {
       try {
+        // sanfter Redirect + Fallback (Safari)
         window.location.href = target;
-        // Backup: falls Safari blockiert -> versuche neues Fenster
         setTimeout(function(){
           if (!document.hidden && window.location.href === url.href) {
             window.open(target, "_self");
           }
-        }, 1500);
+        }, 800);
       } catch(e){
         window.open(target, "_self");
       }
     }
 
-    // A) Pfadbasiert: /e/<eventId>
-    var m = path.match(/\\/e\\/([a-zA-Z0-9]{6,})\\/?$/);
-    if (m) {
-      var eid = m[1];
-      var query = 'event=' + eid + '&mode=form&v=' + eid;
-      var target = url.origin + '/index.html?' + query + '#' + query;
-      safeRedirect(target);
-      return;
-    }
-
-    // B) Hash -> Query
+    // A) Wenn Query fehlt, aber Hash (#event=...) da ist -> Hash -> Query
     if (!hasEventQP && hash.length > 1) {
       var sp = new URLSearchParams(hash.substring(1));
       if (sp.has('event')) {
         if (!sp.has('mode')) sp.set('mode', 'form');
-        url.search = sp.toString();
+        // auf index.html sicherstellen
         if (!onIndex) {
           var p = path;
           if (!p.endsWith('/')) p += '/';
-          url.pathname = p + 'index.html';
+          path = p + 'index.html';
         }
-        safeRedirect(url.toString());
+        var target = url.origin + path + '?' + sp.toString();
+        safeGo(target);
         return;
       }
     }
 
-    // C) Query vorhanden, aber nicht auf index.html -> korrigieren
+    // B) Wenn event im Query ist, aber NICHT auf index.html -> auf index.html schieben
     if (hasEventQP && !onIndex) {
       var p2 = path;
       if (!p2.endsWith('/')) p2 += '/';
-      url.pathname = p2 + 'index.html';
-      safeRedirect(url.toString());
+      var target2 = url.origin + p2 + 'index.html' + url.search;
+      safeGo(target2);
       return;
     }
   } catch (e) { /* noop */ }
 })();
 </script>
 """, unsafe_allow_html=True)
+
 
 # =========================
 #   DATEI-HILFSFUNKTIONEN
@@ -162,9 +154,11 @@ def make_qr_png_bytes(text: str) -> bytes:
     return b.getvalue()
 
 def form_link_for(eid: str) -> str:
-    # Pfadbasiert (iPhone-sicher): /e/<id>
-    # JS leitet sofort auf /index.html?event=<id>&mode=form&v=<id>#{...} um.
-    return f"{BASE_URL}/e/{eid}"
+    # iPhone-sicher: Query + Hash doppelt setzen, plus Cache-Buster
+    # (Wenn iOS die Query entfernt, holt das JS sie aus dem Hash!)
+    query = f"event={eid}&mode=form&v={eid}"
+    return f"{BASE_URL}/index.html?{query}#{query}"
+
 
 def admin_link_for(eid: str) -> str:
     # Admin weiterhin klassisch über index.html + Query
