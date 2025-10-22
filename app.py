@@ -288,12 +288,13 @@ if not event_id and not mode and not noredirect:
 if not event_id and not mode:
     with st.expander("ℹ️ So funktioniert's", expanded=False):
         st.markdown("""
-        **Ablauf:**  
-        1️⃣ Termin anlegen (Titel, Datum, Ort, Typ).  
-        2️⃣ QR-Code scannen oder Link nutzen – direkt zum Formular.  
-        3️⃣ Teilnehmende tragen sich ein (Pflichtfelder).  
-        4️⃣ Admin sieht alles live und kann exportieren.
+**Ablauf:**  
+1️⃣ Termin anlegen (Titel, Datum, Ort, Typ).  
+2️⃣ QR-Code scannen oder Link nutzen – direkt zum Formular.  
+3️⃣ Teilnehmende tragen sich ein (Pflichtfelder).  
+4️⃣ Admin sieht alles live und kann exportieren.
         """)
+
 
     st.subheader("Neuen Termin anlegen")
     with st.form("create_event"):
