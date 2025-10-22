@@ -32,21 +32,54 @@ BASE_URL = os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip
 APP_TITLE = "🧯 Teilnehmerliste Feuerwehr Nordhorn Förderverein"
 
 # =========================
-#   ULTRA-ROBUSTER REDIRECT (/index.html)
+#   ULTRA-ROBUSTER REDIRECT
+#   - /e/<id>  ->  /index.html?event=<id>&mode=form&v=<id>#...
+#   - Hash -> Query (falls Scanner Query kappt)
+#   - Query ohne index.html -> index.html
 # =========================
-# Wenn URL ?event=... enthält, aber Pfad nicht /index.html, sofort clientseitig weiterleiten.
 st.markdown("""
 <script>
 (function () {
   try {
     var url = new URL(window.location.href);
-    var hasEvent = url.searchParams.has('event');
-    var onIndex = url.pathname.toLowerCase().includes('index.html');
-    if (hasEvent && !onIndex) {
-      var basePath = url.pathname;
-      if (!basePath.endsWith('/')) basePath += '/';
-      var target = url.origin + basePath + 'index.html' + url.search;
+    var path = url.pathname;
+    var onIndex = path.toLowerCase().includes('index.html');
+    var hasEventQP = url.searchParams.has('event');
+    var hash = url.hash || "";
+
+    // A) Pfadbasiert: /e/<eventId>
+    var m = path.match(/\\/e\\/([a-zA-Z0-9]{6,})\\/?$/);
+    if (m) {
+      var eid = m[1];
+      var query = 'event=' + eid + '&mode=form&v=' + eid;
+      var target = url.origin + '/index.html?' + query + '#' + query;
       window.location.replace(target);
+      return;
+    }
+
+    // B) Hash → Query (Scanner/Apps, die Query droppen)
+    if (!hasEventQP && hash.length > 1) {
+      var sp = new URLSearchParams(hash.substring(1)); // Hash ohne '#'
+      if (sp.has('event')) {
+        if (!sp.has('mode')) sp.set('mode', 'form');
+        url.search = sp.toString();
+        if (!onIndex) {
+          var p = path;
+          if (!p.endsWith('/')) p += '/';
+          url.pathname = p + 'index.html';
+        }
+        window.location.replace(url.toString());
+        return;
+      }
+    }
+
+    // C) Query vorhanden, aber nicht auf index.html → korrigieren
+    if (hasEventQP && !onIndex) {
+      var p2 = path;
+      if (!p2.endsWith('/')) p2 += '/';
+      url.pathname = p2 + 'index.html';
+      window.location.replace(url.toString());
+      return;
     }
   } catch (e) { /* noop */ }
 })();
@@ -99,7 +132,7 @@ def load_logo():
 #   QR-CODE & LINKS
 # =========================
 def make_qr_png_bytes(text: str) -> bytes:
-    # robust für Handy-Scanner (iPhone/Safari): hohe Fehlerkorrektur, größere Module, Rand
+    # robust für Handy-Scanner: hohe Fehlerkorrektur, größere Module, Rand
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -114,13 +147,12 @@ def make_qr_png_bytes(text: str) -> bytes:
     return b.getvalue()
 
 def form_link_for(eid: str) -> str:
-    # iPhone-sicher: Query UND Hash doppelt setzen, plus Cache-Buster.
-    # Wenn Safari die Query abschneidet, holt das JS sie aus dem Hash zurück.
-    query = f"event={eid}&mode=form&v={eid}"
-    return f"{BASE_URL}/index.html?{query}#{query}"
-
+    # Pfadbasiert (iPhone-sicher): /e/<id>
+    # JS leitet sofort auf /index.html?event=<id>&mode=form&v=<id>#{...} um.
+    return f"{BASE_URL}/e/{eid}"
 
 def admin_link_for(eid: str) -> str:
+    # Admin weiterhin klassisch über index.html + Query
     return f"{BASE_URL}/index.html?event={eid}&mode=admin&key={ADMIN_KEY}"
 
 def regenerate_qr_for_event(eid: str) -> str:
@@ -144,7 +176,7 @@ def new_event(title: str, date: str, location: str, event_type: str):
     }
     # CSV anlegen
     save_event_df(event_id, load_event_df(event_id))
-    # QR generieren (iPhone-sicherer Link)
+    # QR generieren (pfadbasiert)
     link = form_link_for(event_id)
     with open(qr_path(event_id), "wb") as f:
         f.write(make_qr_png_bytes(link))
@@ -178,9 +210,6 @@ def list_events():
 # =========================
 #   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
 # =========================
-# =========================
-#   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
-# =========================
 qp = dict(st.query_params)
 
 event_id   = qp.get("event", None)
@@ -188,7 +217,8 @@ mode       = qp.get("mode", "")
 admin_key  = qp.get("key", "")
 noredirect = qp.get("noredirect", "")
 
-# Safari-Fallback: wenn keine Params direkt übergeben wurden (z. B. iPhone-Kamera)
+# Safari-Fallback: falls Scanner/Browser die Query-Params beim ersten Load nicht liefern,
+# versuche sie aus dem Referer-Header zu rekonstruieren (z. B. iPhone-Kamera-App).
 if not event_id:
     try:
         from streamlit.web.server.websocket_headers import get_websocket_headers
@@ -204,14 +234,13 @@ if not event_id:
         st.toast("📱 Safari-Fix aktiv …")
         st.rerun()
 
-# 🔎 Sicht-Check: zeigt an, was wirklich ankommt
+# Sicht-Check (bei Bedarf löschen)
 st.caption(f"🔎 Status: event={event_id} | mode={mode}")
 
-# Zusätzlicher Fallback: wenn Event da, aber Mode fehlt oder anders ist → immer Formular
+# Zusätzlicher Fallback: wenn Event da, aber Mode fehlt/anders → immer Formular
 if event_id and mode != "form":
     st.query_params.update({"event": event_id, "mode": "form"})
     st.rerun()
-
 
 # =========================
 #   HEADER
@@ -278,7 +307,7 @@ if not event_id and not mode:
             c1.markdown(f"**{meta.get('title','')}**  \n{meta.get('date','')} · {meta.get('location','')}")
             if etype:
                 c1.markdown(f"*{etype}*")
-            form_url = form_link_for(eid)
+            form_url = form_link_for(eid)      # ← zeigt jetzt /e/<id>
             admin_url = admin_link_for(eid)
             c2.code(form_url)
             c3.code(admin_url)
@@ -346,7 +375,7 @@ if mode == "admin":
         label = f" · {etype}" if etype else ""
         st.markdown(f"### {meta.get('title','(ohne Titel)')}{label} – {meta.get('date','')} · {meta.get('location','')}")
 
-        form_url = form_link_for(eid)
+        form_url = form_link_for(eid)  # /e/<id>
         if os.path.exists(qr_path(eid)):
             st.image(qr_path(eid), width=160, caption="QR-Code (Formular)")
         st.link_button("📱 Formular direkt öffnen", form_url)
@@ -377,7 +406,7 @@ if mode == "admin":
         rc1, rc2 = st.columns([1, 3])
         with rc1:
             if st.button("🔄 QR neu erzeugen", key=f"regen_{eid}"):
-                new_url = regenerate_qr_for_event(eid)
+                new_url = regenerate_qr_for_event(eid)  # erzeugt /e/<id>
                 st.success(f"QR aktualisiert: {new_url}")
         with rc2:
             st.code(form_url)
