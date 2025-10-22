@@ -47,19 +47,33 @@ st.markdown("""
     var hasEventQP = url.searchParams.has('event');
     var hash = url.hash || "";
 
+    function safeRedirect(target) {
+      try {
+        window.location.href = target;
+        // Backup: falls Safari blockiert → versuche neues Fenster
+        setTimeout(function(){
+          if (!document.hidden && window.location.href === url.href) {
+            window.open(target, "_self");
+          }
+        }, 1500);
+      } catch(e){
+        window.open(target, "_self");
+      }
+    }
+
     // A) Pfadbasiert: /e/<eventId>
     var m = path.match(/\\/e\\/([a-zA-Z0-9]{6,})\\/?$/);
     if (m) {
       var eid = m[1];
       var query = 'event=' + eid + '&mode=form&v=' + eid;
       var target = url.origin + '/index.html?' + query + '#' + query;
-      window.location.replace(target);
+      safeRedirect(target);
       return;
     }
 
-    // B) Hash → Query (Scanner/Apps, die Query droppen)
+    // B) Hash → Query
     if (!hasEventQP && hash.length > 1) {
-      var sp = new URLSearchParams(hash.substring(1)); // Hash ohne '#'
+      var sp = new URLSearchParams(hash.substring(1));
       if (sp.has('event')) {
         if (!sp.has('mode')) sp.set('mode', 'form');
         url.search = sp.toString();
@@ -68,7 +82,7 @@ st.markdown("""
           if (!p.endsWith('/')) p += '/';
           url.pathname = p + 'index.html';
         }
-        window.location.replace(url.toString());
+        safeRedirect(url.toString());
         return;
       }
     }
@@ -78,12 +92,14 @@ st.markdown("""
       var p2 = path;
       if (!p2.endsWith('/')) p2 += '/';
       url.pathname = p2 + 'index.html';
-      window.location.replace(url.toString());
+      safeRedirect(url.toString());
       return;
     }
   } catch (e) { /* noop */ }
 })();
 </script>
+""", unsafe_allow_html=True)
+
 """, unsafe_allow_html=True)
 
 # =========================
