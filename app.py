@@ -175,15 +175,17 @@ def list_events():
 # =========================
 #   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
 # =========================
-qp = dict(st.query_params)  # neue, stabile Streamlit-API
+# =========================
+#   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
+# =========================
+qp = dict(st.query_params)
 
 event_id   = qp.get("event", None)
 mode       = qp.get("mode", "")
 admin_key  = qp.get("key", "")
 noredirect = qp.get("noredirect", "")
 
-# Safari-Fallback: wenn keine Params direkt übergeben wurden,
-# versuche sie aus dem Referer-Header zu rekonstruieren (z. B. iPhone-Kamera-App)
+# Safari-Fallback: wenn keine Params direkt übergeben wurden (z. B. iPhone-Kamera)
 if not event_id:
     try:
         from streamlit.web.server.websocket_headers import get_websocket_headers
@@ -198,6 +200,15 @@ if not event_id:
         st.query_params.update({"event": event_id, "mode": mode})
         st.toast("📱 Safari-Fix aktiv …")
         st.rerun()
+
+# 🔎 Sicht-Check: zeigt an, was wirklich ankommt
+st.caption(f"🔎 Status: event={event_id} | mode={mode}")
+
+# Zusätzlicher Fallback: wenn Event da, aber Mode fehlt oder anders ist → immer Formular
+if event_id and mode != "form":
+    st.query_params.update({"event": event_id, "mode": "form"})
+    st.rerun()
+
 
 # =========================
 #   HEADER
