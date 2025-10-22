@@ -10,6 +10,32 @@ import streamlit as st
 from PIL import Image
 import qrcode
 from dotenv import load_dotenv
+# ---------- Auto-Redirect für alte Links (ohne /index.html) ----------
+from urllib.parse import urlencode
+
+try:
+    current_qp = dict(st.query_params)  # neue API
+except Exception:
+    current_qp = {}
+
+# Nur wenn wirklich Query-Parameter vorhanden sind UND "event" dabei ist,
+# UND wir (vermutlich) NICHT bereits auf /index.html sind → redirecten.
+if current_qp and "event" in current_qp:
+    # Versuchen, aus dem WebSocket-Referer zu erkennen, ob index.html bereits drin ist
+    try:
+        from streamlit.web.server.websocket_headers import get_websocket_headers
+        referer = (get_websocket_headers() or {}).get("referer", "")
+    except Exception:
+        referer = ""
+
+    if "index.html" not in referer:
+        # Baue eine RELATIVE Ziel-URL → funktioniert auf allen Deployments/Domains
+        fixed_url = "/index.html?" + urlencode(current_qp, doseq=True)
+        st.markdown(
+            f'<meta http-equiv="refresh" content="0; url={fixed_url}">', 
+            unsafe_allow_html=True
+        )
+        st.stop()
 
 # =========================
 #   GRUNDEINSTELLUNGEN
