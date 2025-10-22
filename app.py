@@ -10,7 +10,6 @@ import streamlit as st
 from PIL import Image
 import qrcode
 from dotenv import load_dotenv
-from urllib.parse import urlencode
 
 # =========================
 #   GRUNDEINSTELLUNGEN
@@ -174,31 +173,17 @@ def list_events():
     return items
 
 # =========================
-#   QUERY-PARAMS (ROBUST) + SAFARI-FIX
+#   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
 # =========================
-# neuer Weg
-try:
-    qp_new = dict(st.query_params)
-except Exception:
-    qp_new = {}
-# Fallback (ältere Clients)
-try:
-    qp_old = st.experimental_get_query_params()
-except Exception:
-    qp_old = {}
+qp = dict(st.query_params)  # neue, stabile Streamlit-API
 
-def _pick_param(name, default=None):
-    if name in qp_new and qp_new.get(name) not in (None, "", []):
-        return qp_new.get(name)
-    v = qp_old.get(name, [None])
-    return (v[0] if isinstance(v, list) else v) or default
+event_id   = qp.get("event", None)
+mode       = qp.get("mode", "")
+admin_key  = qp.get("key", "")
+noredirect = qp.get("noredirect", "")
 
-event_id = _pick_param("event", None)
-mode = _pick_param("mode", "")
-admin_key = _pick_param("key", "")
-noredirect = _pick_param("noredirect", "")
-
-# Safari-Fallback: Parameter ggf. aus Referer rekonstruieren
+# Safari-Fallback: wenn keine Params direkt übergeben wurden,
+# versuche sie aus dem Referer-Header zu rekonstruieren (z. B. iPhone-Kamera-App)
 if not event_id:
     try:
         from streamlit.web.server.websocket_headers import get_websocket_headers
