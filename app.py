@@ -1,9 +1,9 @@
 import os
 import io
 import json
-import re
 import uuid
 from datetime import datetime
+
 import pandas as pd
 import streamlit as st
 from PIL import Image
@@ -30,58 +30,6 @@ BASE_URL = os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip
 APP_TITLE = "🧯 Teilnehmerliste Feuerwehr Nordhorn Förderverein"
 
 # =========================
-#   ULTRA-ROBUSTER SAFARI-REDIRECT
-# =========================
-st.markdown("""
-<script>
-(function(){
-  try{
-    var u = new URL(window.location.href);
-    var onIndex = /index\\.html$/i.test(u.pathname);
-    var hasQ = u.searchParams.has('event');
-    var hash = u.hash || "";
-    var spHash = hash.length > 1 ? new URLSearchParams(hash.slice(1)) : null;
-    var hasH = spHash && spHash.has('event');
-
-    function go(target){
-      try { window.location.assign(target); } catch(e){}
-      // Meta-Refresh als Fallback (iOS Kamera-Viewer bremst JS manchmal)
-      try {
-        var meta = document.createElement('meta');
-        meta.httpEquiv = 'refresh';
-        meta.content = '0; url=' + target;
-        document.head.appendChild(meta);
-      } catch(e){}
-    }
-
-    // A) event-Param irgendwo (Query ODER Hash) vorhanden, aber nicht auf /index.html
-    if ((hasQ || hasH) && !onIndex) {
-      var p = hasQ ? u.searchParams : spHash;
-      if (!p.has('mode')) p.set('mode','form');
-      var qs = p.toString();
-      var target = u.origin + '/index.html?' + qs;
-      go(target);
-      return;
-    }
-
-    // B) Nur Hash vorhanden und bereits /index.html -> Hash -> Query
-    if (!hasQ && hasH && onIndex) {
-      var qs2 = spHash.toString();
-      var target2 = u.origin + u.pathname + '?' + qs2;
-      go(target2);
-      return;
-    }
-  }catch(e){}
-})();
-</script>
-<noscript>
-<p>Wenn nichts passiert, hier tippen:
-  <a href="index.html">Zum Formular</a>
-</p>
-</noscript>
-""", unsafe_allow_html=True)
-
-# =========================
 #   DATEI-HILFSFUNKTIONEN
 # =========================
 def event_path(event_id: str) -> str:
@@ -94,10 +42,10 @@ def meta_path(event_id: str) -> str:
     return os.path.join(DATA_DIR, f"{event_id}_meta.json")
 
 def load_event_df(event_id: str) -> pd.DataFrame:
-    p = event_path(event_id)
-    if os.path.exists(p):
+    path = event_path(event_id)
+    if os.path.exists(path):
         try:
-            return pd.read_csv(p)
+            return pd.read_csv(path)
         except Exception:
             pass
     return pd.DataFrame(columns=["event_type", "timestamp", "date", "name", "company", "photo_consent"])
@@ -141,9 +89,8 @@ def make_qr_png_bytes(text: str) -> bytes:
     return b.getvalue()
 
 def form_link_for(eid: str) -> str:
-    # iPhone-sicher: Query + Hash doppelt setzen, plus Cache-Buster
-    q = f"event={eid}&mode=form&v={eid}"
-    return f"{BASE_URL}/index.html?{q}#{q}"
+    # iPhone-kompatibel: direkte Query auf index.html (keine Hashes oder Redirects)
+    return f"{BASE_URL}/index.html?event={eid}&mode=form&v={eid}"
 
 def admin_link_for(eid: str) -> str:
     return f"{BASE_URL}/index.html?event={eid}&mode=admin&key={ADMIN_KEY}"
@@ -198,7 +145,7 @@ def list_events():
     return items
 
 # =========================
-#   QUERY-PARAMS (neue API)
+#   QUERY-PARAMS
 # =========================
 qp = dict(st.query_params)
 event_id = qp.get("event", None)
@@ -228,7 +175,7 @@ if not event_id and not mode:
         st.markdown("""
 **Ablauf:**  
 1. Termin anlegen (Titel, Datum, Ort, Typ).  
-2. QR-Code scannen oder Link nutzen - direkt zum Formular.  
+2. QR-Code scannen oder Link öffnen – direkt zum Formular.  
 3. Teilnehmende tragen sich ein (Pflichtfelder).  
 4. Admin sieht alles live und kann exportieren.
         """)
