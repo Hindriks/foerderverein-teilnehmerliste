@@ -4,7 +4,6 @@ import json
 import re
 import uuid
 from datetime import datetime
-
 import pandas as pd
 import streamlit as st
 from PIL import Image
@@ -26,72 +25,61 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "112")
-LOGO_FILENAME = os.getenv("LOGO_FILE", "Logo Förderverein.jpg") or ""  # leer = Logo aus
+LOGO_FILENAME = os.getenv("LOGO_FILE", "Logo Förderverein.jpg") or ""
 BASE_URL = os.getenv("BASE_URL", "https://teilnehmerliste.streamlit.app").rstrip("/")
-
 APP_TITLE = "🧯 Teilnehmerliste Feuerwehr Nordhorn Förderverein"
 
 # =========================
-#   ULTRA-ROBUSTER REDIRECT
-#   - /e/<id>  ->  /index.html?event=<id>&mode=form&v=<id>#...
-#   - Hash -> Query (falls Scanner Query kappt)
-#   - Query ohne index.html -> index.html
-#   - Sanfter Redirect (Safari-Fix)
+#   ULTRA-ROBUSTER SAFARI-REDIRECT
 # =========================
 st.markdown("""
 <script>
-(function () {
-  try {
-    var url = new URL(window.location.href);
-    var path = url.pathname;
-    var onIndex = path.toLowerCase().includes('index.html');
-    var hasEventQP = url.searchParams.has('event');
-    var hash = url.hash || "";
+(function(){
+  try{
+    var u = new URL(window.location.href);
+    var onIndex = /index\\.html$/i.test(u.pathname);
+    var hasQ = u.searchParams.has('event');
+    var hash = u.hash || "";
+    var spHash = hash.length > 1 ? new URLSearchParams(hash.slice(1)) : null;
+    var hasH = spHash && spHash.has('event');
 
-    function safeGo(target) {
+    function go(target){
+      try { window.location.assign(target); } catch(e){}
+      // Meta-Refresh als Fallback (iOS Kamera-Viewer bremst JS manchmal)
       try {
-        // sanfter Redirect + Fallback (Safari)
-        window.location.href = target;
-        setTimeout(function(){
-          if (!document.hidden && window.location.href === url.href) {
-            window.open(target, "_self");
-          }
-        }, 800);
-      } catch(e){
-        window.open(target, "_self");
-      }
+        var meta = document.createElement('meta');
+        meta.httpEquiv = 'refresh';
+        meta.content = '0; url=' + target;
+        document.head.appendChild(meta);
+      } catch(e){}
     }
 
-    // A) Wenn Query fehlt, aber Hash (#event=...) da ist -> Hash -> Query
-    if (!hasEventQP && hash.length > 1) {
-      var sp = new URLSearchParams(hash.substring(1));
-      if (sp.has('event')) {
-        if (!sp.has('mode')) sp.set('mode', 'form');
-        // auf index.html sicherstellen
-        if (!onIndex) {
-          var p = path;
-          if (!p.endsWith('/')) p += '/';
-          path = p + 'index.html';
-        }
-        var target = url.origin + path + '?' + sp.toString();
-        safeGo(target);
-        return;
-      }
-    }
-
-    // B) Wenn event im Query ist, aber NICHT auf index.html -> auf index.html schieben
-    if (hasEventQP && !onIndex) {
-      var p2 = path;
-      if (!p2.endsWith('/')) p2 += '/';
-      var target2 = url.origin + p2 + 'index.html' + url.search;
-      safeGo(target2);
+    // A) event-Param irgendwo (Query ODER Hash) vorhanden, aber nicht auf /index.html
+    if ((hasQ || hasH) && !onIndex) {
+      var p = hasQ ? u.searchParams : spHash;
+      if (!p.has('mode')) p.set('mode','form');
+      var qs = p.toString();
+      var target = u.origin + '/index.html?' + qs;
+      go(target);
       return;
     }
-  } catch (e) { /* noop */ }
+
+    // B) Nur Hash vorhanden und bereits /index.html -> Hash -> Query
+    if (!hasQ && hasH && onIndex) {
+      var qs2 = spHash.toString();
+      var target2 = u.origin + u.pathname + '?' + qs2;
+      go(target2);
+      return;
+    }
+  }catch(e){}
 })();
 </script>
+<noscript>
+<p>Wenn nichts passiert, hier tippen:
+  <a href="index.html">Zum Formular</a>
+</p>
+</noscript>
 """, unsafe_allow_html=True)
-
 
 # =========================
 #   DATEI-HILFSFUNKTIONEN
@@ -139,7 +127,6 @@ def load_logo():
 #   QR-CODE & LINKS
 # =========================
 def make_qr_png_bytes(text: str) -> bytes:
-    # robust für Handy-Scanner: hohe Fehlerkorrektur, größere Module, Rand
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -155,13 +142,10 @@ def make_qr_png_bytes(text: str) -> bytes:
 
 def form_link_for(eid: str) -> str:
     # iPhone-sicher: Query + Hash doppelt setzen, plus Cache-Buster
-    # (Wenn iOS die Query entfernt, holt das JS sie aus dem Hash!)
-    query = f"event={eid}&mode=form&v={eid}"
-    return f"{BASE_URL}/index.html?{query}#{query}"
-
+    q = f"event={eid}&mode=form&v={eid}"
+    return f"{BASE_URL}/index.html?{q}#{q}"
 
 def admin_link_for(eid: str) -> str:
-    # Admin weiterhin klassisch über index.html + Query
     return f"{BASE_URL}/index.html?event={eid}&mode=admin&key={ADMIN_KEY}"
 
 def regenerate_qr_for_event(eid: str) -> str:
@@ -183,13 +167,10 @@ def new_event(title: str, date: str, location: str, event_type: str):
         "event_type": event_type.strip(),
         "created_at": datetime.now().isoformat(timespec="seconds")
     }
-    # CSV anlegen
     save_event_df(event_id, load_event_df(event_id))
-    # QR generieren (pfadbasiert)
     link = form_link_for(event_id)
     with open(qr_path(event_id), "wb") as f:
         f.write(make_qr_png_bytes(link))
-    # Meta speichern
     with open(meta_path(event_id), "w", encoding="utf-8") as f:
         f.write(json.dumps(meta, ensure_ascii=False, indent=2))
     return meta, link
@@ -217,39 +198,15 @@ def list_events():
     return items
 
 # =========================
-#   QUERY-PARAMS (nur neue API) + SAFARI-Fallback
+#   QUERY-PARAMS (neue API)
 # =========================
 qp = dict(st.query_params)
-
-event_id   = qp.get("event", None)
-mode       = qp.get("mode", "")
-admin_key  = qp.get("key", "")
+event_id = qp.get("event", None)
+mode = qp.get("mode", "")
+admin_key = qp.get("key", "")
 noredirect = qp.get("noredirect", "")
 
-# Safari-Fallback: falls Scanner/Browser die Query-Params beim ersten Load nicht liefern,
-# versuche sie aus dem Referer-Header zu rekonstruieren (z. B. iPhone-Kamera-App).
-if not event_id:
-    try:
-        from streamlit.web.server.websocket_headers import get_websocket_headers
-        referer = (get_websocket_headers() or {}).get("referer", "")
-    except Exception:
-        referer = ""
-    m_e = re.search(r"[?&]event=([a-zA-Z0-9]+)", referer)
-    m_m = re.search(r"[?&]mode=([a-zA-Z]+)", referer)
-    if m_e:
-        event_id = m_e.group(1)
-        mode = m_m.group(1) if m_m else "form"
-        st.query_params.update({"event": event_id, "mode": mode})
-        st.toast("Safari-Fix aktiv ...")
-        st.rerun()
-
-# Sicht-Check (bei Bedarf löschen)
 st.caption(f"Status: event={event_id} | mode={mode}")
-
-# Zusätzlicher Fallback: nur wenn Event da UND KEIN mode gesetzt ist -> auf "form"
-if event_id and not mode:
-    st.query_params.update({"event": event_id, "mode": "form"})
-    st.rerun()
 
 # =========================
 #   HEADER
@@ -264,26 +221,15 @@ with col_title:
 st.markdown("---")
 
 # =========================
-#   AUTO-REDIRECT HOME -> letzter Termin (nur ohne Params)
-# =========================
-if not event_id and not mode and not noredirect:
-    evts = list_events()
-    if evts:
-        latest = evts[0]["id"]
-        st.query_params.update({"event": latest, "mode": "form"})
-        st.toast("Weiterleitung zum aktuellen Formular ...")
-        st.rerun()
-
-# =========================
-#   STARTSEITE (nur ohne Params)
+#   STARTSEITE
 # =========================
 if not event_id and not mode:
-    with st.expander("So funktioniert's", expanded=False):
+    with st.expander("ℹ️ So funktioniert's", expanded=False):
         st.markdown("""
-Ablauf:
-1. Termin anlegen (Titel, Datum, Ort, Typ).
-2. QR-Code scannen oder Link nutzen - direkt zum Formular.
-3. Teilnehmende tragen sich ein (Pflichtfelder).
+**Ablauf:**  
+1. Termin anlegen (Titel, Datum, Ort, Typ).  
+2. QR-Code scannen oder Link nutzen - direkt zum Formular.  
+3. Teilnehmende tragen sich ein (Pflichtfelder).  
 4. Admin sieht alles live und kann exportieren.
         """)
 
@@ -297,10 +243,9 @@ Ablauf:
         submitted = st.form_submit_button("Termin erstellen")
         if submitted:
             meta, link = new_event(title, date, location, event_type)
-            st.success(f"Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
-            st.markdown(f"Formular-Link: `{link}`")
-            st.image(qr_path(meta['id']), caption="QR-Code zum Formular")
-            st.link_button("Formular direkt öffnen", link)
+            st.success(f"✅ Termin erstellt: {meta['title']} ({meta['date']}, {meta['location']}) – {meta['event_type']}")
+            st.image(qr_path(meta['id']), caption="📱 QR-Code zum Formular")
+            st.link_button("📱 Formular direkt öffnen", link)
             st.write("Direktlink:", link)
             st.stop()
 
@@ -316,13 +261,13 @@ Ablauf:
             c1.markdown(f"**{meta.get('title','')}**  \n{meta.get('date','')} · {meta.get('location','')}")
             if etype:
                 c1.markdown(f"*{etype}*")
-            form_url = form_link_for(eid)      # zeigt /e/<id>
+            form_url = form_link_for(eid)
             admin_url = admin_link_for(eid)
             c2.code(form_url)
             c3.code(admin_url)
             if os.path.exists(qr_path(eid)):
                 c4.image(qr_path(eid), caption="QR (Formular)")
-            st.link_button("Formular direkt öffnen", form_url)
+            st.link_button("📱 Formular direkt öffnen", form_url)
             st.write("Direktlink:", form_url)
     st.stop()
 
@@ -330,11 +275,11 @@ Ablauf:
 #   FORMULAR
 # =========================
 if event_id and mode == "form":
-    st.header("Anmeldung")
+    st.header("📋 Anmeldung")
     df = load_event_df(event_id)
     meta = read_meta(event_id)
     pretype = (meta.get("event_type", "") or "Feuerlöschtraining").strip()
-    st.info(f"Veranstaltung: {pretype}")
+    st.info(f"Veranstaltung: **{pretype}**")
 
     with st.form("signup"):
         c1, c2 = st.columns(2)
@@ -358,21 +303,21 @@ if event_id and mode == "form":
                 }
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
                 save_event_df(event_id, df)
-                st.success("Danke! Deine Anmeldung wurde gespeichert.")
+                st.success("✅ Danke! Deine Anmeldung wurde gespeichert.")
                 st.query_params.update({"event": event_id, "mode": "form"})
                 st.balloons()
                 st.stop()
     st.stop()
 
 # =========================
-#   ADMIN (ÜBERSICHT)
+#   ADMIN
 # =========================
 if mode == "admin":
     if admin_key != ADMIN_KEY:
         st.error("Kein Zugriff: falsches oder fehlendes Admin-Passwort.")
         st.stop()
 
-    st.header("Admin-Übersicht – Alle Termine")
+    st.header("🧯 Admin-Übersicht – Alle Termine")
     events = list_events()
     if not events:
         st.info("Noch keine Termine angelegt.")
@@ -383,11 +328,10 @@ if mode == "admin":
         etype = meta.get("event_type", "")
         label = f" · {etype}" if etype else ""
         st.markdown(f"### {meta.get('title','(ohne Titel)')}{label} – {meta.get('date','')} · {meta.get('location','')}")
-
-        form_url = form_link_for(eid)  # /e/<id>
+        form_url = form_link_for(eid)
         if os.path.exists(qr_path(eid)):
             st.image(qr_path(eid), width=160, caption="QR-Code (Formular)")
-        st.link_button("Formular direkt öffnen", form_url)
+        st.link_button("📱 Formular direkt öffnen", form_url)
         st.code(form_url)
 
         df = load_event_df(eid)
@@ -397,7 +341,7 @@ if mode == "admin":
         c1, c2 = st.columns(2)
         with c1:
             st.download_button(
-                "CSV exportieren",
+                "⬇️ CSV exportieren",
                 data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"teilnehmer_{eid}.csv",
                 mime="text/csv",
@@ -405,26 +349,17 @@ if mode == "admin":
             )
         with c2:
             st.download_button(
-                "XLSX exportieren",
+                "⬇️ XLSX exportieren",
                 data=export_xlsx_bytes(df),
                 file_name=f"teilnehmer_{eid}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key=f"xlsx_{eid}"
             )
 
-        rc1, rc2 = st.columns([1, 3])
-        with rc1:
-            if st.button("QR neu erzeugen", key=f"regen_{eid}"):
-                new_url = regenerate_qr_for_event(eid)  # erzeugt /e/<id>
-                st.success(f"QR aktualisiert: {new_url}")
-        with rc2:
-            st.code(form_url)
-
         st.warning("Zurücksetzen leert diese Teilnehmerliste unwiderruflich.")
-        if st.button("Liste zurücksetzen", key=f"reset_{eid}"):
+        if st.button("🔁 Liste zurücksetzen", key=f"reset_{eid}"):
             save_event_df(eid, load_event_df(eid).iloc[0:0])
             st.success(f"Liste {meta.get('title','')} zurückgesetzt.")
-
         st.divider()
 
     st.stop()
